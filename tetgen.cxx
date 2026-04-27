@@ -53,6 +53,242 @@
 
 //============================================================================//
 //                                                                            //
+// Local density region helpers for tetgenio.                                  //
+//                                                                            //
+//============================================================================//
+
+static REAL tetgen_clamp_density_sizefactor(REAL sizefactor)
+{
+  if (sizefactor <= 0.0) {
+    return 1.0;
+  }
+  return sizefactor < 1.0 ? sizefactor : 1.0;
+}
+
+static void tetgen_set_density_bbox(tetgenio::densityregion *region)
+{
+  if (region->type == tetgenio::BOXDENSITYREGION) {
+    region->bbox[0] = region->p0[0] < region->p1[0] ? region->p0[0] : region->p1[0];
+    region->bbox[1] = region->p0[0] > region->p1[0] ? region->p0[0] : region->p1[0];
+    region->bbox[2] = region->p0[1] < region->p1[1] ? region->p0[1] : region->p1[1];
+    region->bbox[3] = region->p0[1] > region->p1[1] ? region->p0[1] : region->p1[1];
+    region->bbox[4] = region->p0[2] < region->p1[2] ? region->p0[2] : region->p1[2];
+    region->bbox[5] = region->p0[2] > region->p1[2] ? region->p0[2] : region->p1[2];
+  } else if (region->type == tetgenio::CYLINDERDENSITYREGION) {
+    for (int i = 0; i < 3; i++) {
+      REAL lo = region->p0[i] < region->p1[i] ? region->p0[i] : region->p1[i];
+      REAL hi = region->p0[i] > region->p1[i] ? region->p0[i] : region->p1[i];
+      region->bbox[i * 2] = lo - region->radius;
+      region->bbox[i * 2 + 1] = hi + region->radius;
+    }
+  } else if (region->type == tetgenio::SPHEREDENSITYREGION) {
+    region->bbox[0] = region->p0[0] - region->radius;
+    region->bbox[1] = region->p0[0] + region->radius;
+    region->bbox[2] = region->p0[1] - region->radius;
+    region->bbox[3] = region->p0[1] + region->radius;
+    region->bbox[4] = region->p0[2] - region->radius;
+    region->bbox[5] = region->p0[2] + region->radius;
+  } else if ((region->type == tetgenio::PLCDENSITYREGION) &&
+             (region->numberofpoints > 0)) {
+    region->bbox[0] = region->bbox[1] = region->pointlist[0];
+    region->bbox[2] = region->bbox[3] = region->pointlist[1];
+    region->bbox[4] = region->bbox[5] = region->pointlist[2];
+    for (int i = 1; i < region->numberofpoints; i++) {
+      REAL *p = &(region->pointlist[i * 3]);
+      if (p[0] < region->bbox[0]) region->bbox[0] = p[0];
+      if (p[0] > region->bbox[1]) region->bbox[1] = p[0];
+      if (p[1] < region->bbox[2]) region->bbox[2] = p[1];
+      if (p[1] > region->bbox[3]) region->bbox[3] = p[1];
+      if (p[2] < region->bbox[4]) region->bbox[4] = p[2];
+      if (p[2] > region->bbox[5]) region->bbox[5] = p[2];
+    }
+  }
+}
+
+static void tetgen_append_density_region(tetgenio *io,
+                                         tetgenio::densityregion *region)
+{
+  tetgenio::densityregion *newlist =
+    new tetgenio::densityregion[io->numberofdensityregions + 1];
+  if (newlist == (tetgenio::densityregion *) NULL) {
+    terminatetetgen(NULL, 1);
+  }
+  for (int i = 0; i < io->numberofdensityregions; i++) {
+    newlist[i] = io->densityregionlist[i];
+  }
+  newlist[io->numberofdensityregions] = *region;
+  if (io->densityregionlist != (tetgenio::densityregion *) NULL) {
+    delete [] io->densityregionlist;
+  }
+  io->densityregionlist = newlist;
+  io->numberofdensityregions++;
+}
+
+void tetgenio::clear_density_regions()
+{
+  if (densityregionlist == (densityregion *) NULL) {
+    numberofdensityregions = 0;
+    return;
+  }
+
+  for (int i = 0; i < numberofdensityregions; i++) {
+    densityregion *region = &(densityregionlist[i]);
+    if (region->pointlist != (REAL *) NULL) {
+      delete [] region->pointlist;
+    }
+    if (region->facetlist != (facet *) NULL) {
+      for (int j = 0; j < region->numberoffacets; j++) {
+        facet *f = &(region->facetlist[j]);
+        if (f->polygonlist != (polygon *) NULL) {
+          for (int k = 0; k < f->numberofpolygons; k++) {
+            if (f->polygonlist[k].vertexlist != (int *) NULL) {
+              delete [] f->polygonlist[k].vertexlist;
+            }
+          }
+          delete [] f->polygonlist;
+        }
+        if (f->holelist != (REAL *) NULL) {
+          delete [] f->holelist;
+        }
+      }
+      delete [] region->facetlist;
+    }
+  }
+  delete [] densityregionlist;
+  densityregionlist = (densityregion *) NULL;
+  numberofdensityregions = 0;
+}
+
+void tetgenio::add_density_region_box(REAL *minpt, REAL *maxpt,
+                                      REAL sizefactor, REAL transition)
+{
+  densityregion region;
+  tetgenio::init(&region);
+  region.type = BOXDENSITYREGION;
+  region.sizefactor = tetgen_clamp_density_sizefactor(sizefactor);
+  region.transition = transition > 0.0 ? transition : 0.0;
+  for (int i = 0; i < 3; i++) {
+    region.p0[i] = minpt[i];
+    region.p1[i] = maxpt[i];
+  }
+  tetgen_set_density_bbox(&region);
+  tetgen_append_density_region(this, &region);
+}
+
+void tetgenio::add_density_region_cylinder(REAL *basept, REAL *toppt,
+                                           REAL radius, REAL sizefactor,
+                                           REAL transition)
+{
+  if (radius <= 0.0) {
+    return;
+  }
+
+  densityregion region;
+  tetgenio::init(&region);
+  region.type = CYLINDERDENSITYREGION;
+  region.sizefactor = tetgen_clamp_density_sizefactor(sizefactor);
+  region.transition = transition > 0.0 ? transition : 0.0;
+  region.radius = radius;
+  for (int i = 0; i < 3; i++) {
+    region.p0[i] = basept[i];
+    region.p1[i] = toppt[i];
+  }
+  tetgen_set_density_bbox(&region);
+  tetgen_append_density_region(this, &region);
+}
+
+void tetgenio::add_density_region_sphere(REAL *center, REAL radius,
+                                         REAL sizefactor, REAL transition)
+{
+  if (radius <= 0.0) {
+    return;
+  }
+
+  densityregion region;
+  tetgenio::init(&region);
+  region.type = SPHEREDENSITYREGION;
+  region.sizefactor = tetgen_clamp_density_sizefactor(sizefactor);
+  region.transition = transition > 0.0 ? transition : 0.0;
+  region.radius = radius;
+  for (int i = 0; i < 3; i++) {
+    region.p0[i] = center[i];
+  }
+  tetgen_set_density_bbox(&region);
+  tetgen_append_density_region(this, &region);
+}
+
+void tetgenio::add_density_region_plc(tetgenio *surface,
+                                      REAL sizefactor, REAL transition)
+{
+  if ((surface == (tetgenio *) NULL) || (surface->numberofpoints <= 0) ||
+      (surface->numberoffacets <= 0) ||
+      (surface->pointlist == (REAL *) NULL) ||
+      (surface->facetlist == (facet *) NULL)) {
+    return;
+  }
+
+  densityregion region;
+  tetgenio::init(&region);
+  region.type = PLCDENSITYREGION;
+  region.sizefactor = tetgen_clamp_density_sizefactor(sizefactor);
+  region.transition = transition > 0.0 ? transition : 0.0;
+  region.numberofpoints = surface->numberofpoints;
+  region.numberoffacets = surface->numberoffacets;
+  region.firstnumber = surface->firstnumber;
+
+  region.pointlist = new REAL[region.numberofpoints * 3];
+  if (region.pointlist == (REAL *) NULL) {
+    terminatetetgen(NULL, 1);
+  }
+  memcpy(region.pointlist, surface->pointlist,
+         sizeof(REAL) * region.numberofpoints * 3);
+
+  region.facetlist = new facet[region.numberoffacets];
+  if (region.facetlist == (facet *) NULL) {
+    terminatetetgen(NULL, 1);
+  }
+  for (int i = 0; i < region.numberoffacets; i++) {
+    facet *srcf = &(surface->facetlist[i]);
+    facet *dstf = &(region.facetlist[i]);
+    tetgenio::init(dstf);
+    dstf->numberofpolygons = srcf->numberofpolygons;
+    dstf->numberofholes = srcf->numberofholes;
+    if (dstf->numberofpolygons > 0) {
+      dstf->polygonlist = new polygon[dstf->numberofpolygons];
+      if (dstf->polygonlist == (polygon *) NULL) {
+        terminatetetgen(NULL, 1);
+      }
+      for (int j = 0; j < dstf->numberofpolygons; j++) {
+        polygon *srcp = &(srcf->polygonlist[j]);
+        polygon *dstp = &(dstf->polygonlist[j]);
+        tetgenio::init(dstp);
+        dstp->numberofvertices = srcp->numberofvertices;
+        if (dstp->numberofvertices > 0) {
+          dstp->vertexlist = new int[dstp->numberofvertices];
+          if (dstp->vertexlist == (int *) NULL) {
+            terminatetetgen(NULL, 1);
+          }
+          memcpy(dstp->vertexlist, srcp->vertexlist,
+                 sizeof(int) * dstp->numberofvertices);
+        }
+      }
+    }
+    if (dstf->numberofholes > 0) {
+      dstf->holelist = new REAL[dstf->numberofholes * 3];
+      if (dstf->holelist == (REAL *) NULL) {
+        terminatetetgen(NULL, 1);
+      }
+      memcpy(dstf->holelist, srcf->holelist,
+             sizeof(REAL) * dstf->numberofholes * 3);
+    }
+  }
+
+  tetgen_set_density_bbox(&region);
+  tetgen_append_density_region(this, &region);
+}
+
+//============================================================================//
+//                                                                            //
 // load_node_call()    Read a list of points from a file.                     //
 //                                                                            //
 // 'infile' is the file handle contains the node list.  It may point to a     //

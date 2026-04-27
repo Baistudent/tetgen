@@ -94,6 +94,15 @@ default behavior must remain unchanged when no density regions are configured.
 ## Completed Changes
 
 - Created this notes file after initial repository and architecture review.
+- Added `tetgenio::densityregion` storage and library helper APIs:
+  - `add_density_region_box(minpt, maxpt, sizefactor, transition)`
+  - `add_density_region_cylinder(basept, toppt, radius, sizefactor, transition)`
+  - `add_density_region_sphere(center, radius, sizefactor, transition)`
+  - `add_density_region_plc(surface, sizefactor, transition)`
+  - `clear_density_regions()`
+- The PLC density-region helper deep-copies the existing `tetgenio` point and
+  facet representation so callers can load or construct a closed `.poly`-style
+  surface without introducing a new geometry file format.
 
 ## Current Issues
 

@@ -154,6 +154,32 @@ public:
     int *elist;
   } vorofacet;
 
+  // A local density region for tetrahedral mesh refinement.  'sizefactor'
+  // is a target-size multiplier relative to the active base size.  Values
+  // between 0 and 1 request smaller local tetrahedra.  'transition' is the
+  // outward smoothing distance where the size returns to the base size.
+  enum densityregiontype {
+    BOXDENSITYREGION = 1,
+    CYLINDERDENSITYREGION = 2,
+    SPHEREDENSITYREGION = 3,
+    PLCDENSITYREGION = 4
+  };
+
+  typedef struct {
+    int type;
+    REAL sizefactor;
+    REAL transition;
+    REAL p0[3];
+    REAL p1[3];
+    REAL radius;
+    REAL bbox[6];
+    REAL *pointlist;
+    facet *facetlist;
+    int numberofpoints;
+    int numberoffacets;
+    int firstnumber;
+  } densityregion;
+
 
   // Additional parameters associated with an input (or mesh) vertex.
   //   These informations are provided by CAD libraries. 
@@ -275,6 +301,11 @@ public:
   REAL *segmentconstraintlist;
   int numberofsegmentconstraints;
 
+  // Optional local density regions.  They are ignored unless one or more
+  // regions are added by the library caller before tetrahedralize().
+  densityregion *densityregionlist;
+  int numberofdensityregions;
+
 
   // 'trifacelist':  An array of face (triangle) corners.  The first face's
   //   three corners are at indices [0], [1] and [2], followed by the remaining
@@ -360,6 +391,13 @@ public:
   void save_poly(const char*);
   void save_faces2smesh(char*);
 
+  // Local density region helpers for library callers.
+  void clear_density_regions();
+  void add_density_region_box(REAL*, REAL*, REAL, REAL);
+  void add_density_region_cylinder(REAL*, REAL*, REAL, REAL, REAL);
+  void add_density_region_sphere(REAL*, REAL, REAL, REAL);
+  void add_density_region_plc(tetgenio*, REAL, REAL);
+
   // Read line and parse string functions.
   char *readline(char* string, FILE* infile, int *linenumber);
   char *findnextfield(char* string);
@@ -376,6 +414,22 @@ public:
     f->numberofpolygons = 0;
     f->holelist = (REAL *) NULL;
     f->numberofholes = 0;
+  }
+
+  static void init(densityregion* r) {
+    r->type = 0;
+    r->sizefactor = 1.0;
+    r->transition = 0.0;
+    r->p0[0] = r->p0[1] = r->p0[2] = 0.0;
+    r->p1[0] = r->p1[1] = r->p1[2] = 0.0;
+    r->radius = 0.0;
+    r->bbox[0] = r->bbox[2] = r->bbox[4] = 0.0;
+    r->bbox[1] = r->bbox[3] = r->bbox[5] = 0.0;
+    r->pointlist = (REAL *) NULL;
+    r->facetlist = (facet *) NULL;
+    r->numberofpoints = 0;
+    r->numberoffacets = 0;
+    r->firstnumber = 0;
   }
 
   // Initialize routine.
@@ -437,6 +491,8 @@ public:
     segmentconstraintlist = (REAL *) NULL;
     numberofsegmentconstraints = 0;
 
+    densityregionlist = (densityregion *) NULL;
+    numberofdensityregions = 0;
 
     vpointlist = (REAL *) NULL;
     vedgelist = (voroedge *) NULL;
@@ -569,6 +625,7 @@ public:
     if (segmentconstraintlist != (REAL *) NULL) {
       delete [] segmentconstraintlist;
     }
+    clear_density_regions();
     if (vpointlist != (REAL *) NULL) {
       delete [] vpointlist;
     }
