@@ -1,0 +1,20 @@
+# vtk DataFile Version 3.0
+TetGen input PLC
+ASCII
+DATASET POLYDATA
+POINTS 6 double
+0.4 1 5
+1.6 1 5
+1 0.56 5
+1 1.44 5
+1 1 5.9
+1 1 4.1
+POLYGONS 8 32
+3 0 2 4
+3 2 1 4
+3 1 3 4
+3 3 0 4
+3 2 0 5
+3 1 2 5
+3 3 1 5
+3 0 3 5

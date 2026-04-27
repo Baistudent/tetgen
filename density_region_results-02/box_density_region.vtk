@@ -1,0 +1,20 @@
+# vtk DataFile Version 3.0
+Box density region
+ASCII
+DATASET POLYDATA
+POINTS 8 double
+0.56 0.56 4.2
+1.44 0.56 4.2
+1.44 1.44 4.2
+0.56 1.44 4.2
+0.56 0.56 5.8
+1.44 0.56 5.8
+1.44 1.44 5.8
+0.56 1.44 5.8
+POLYGONS 6 30
+4 0 1 2 3
+4 4 7 6 5
+4 0 4 5 1
+4 1 5 6 2
+4 2 6 7 3
+4 3 7 4 0
