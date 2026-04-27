@@ -88,8 +88,9 @@ default behavior must remain unchanged when no density regions are configured.
   and helper API declarations; add internal `tetgenmesh` helper declarations.
 - `tetgen.cxx`: implement region evaluation and integrate it into
   `check_tetrahedron()` / `checktet4split()`.
-- New example C++ file: demonstrate library use with `example.poly` and write
-  TetGen plus VTK legacy outputs.
+- `examples/custom_density_regions.cxx`: demonstrate library use with
+  `example.poly` and write TetGen plus VTK legacy outputs.
+- `CMakeLists.txt`: optional `BUILD_DENSITY_EXAMPLE` target.
 
 ## Completed Changes
 
@@ -117,6 +118,10 @@ default behavior must remain unchanged when no density regions are configured.
   this order: fixed `-a#` volume length, per-tet `-a` volume bound, point
   metric `-m`, then a conservative fallback of `longest / 24` when a caller
   supplies density regions without another size field.
+- Added `examples/custom_density_regions.cxx` and optional CMake target
+  `density_regions_example`. The example reads `example.poly`, runs baseline,
+  box, cylinder, sphere, and custom closed PLC density-region cases, then
+  writes `.node`, `.ele`, `.face`, and VTK legacy files.
 
 ## Current Issues
 
