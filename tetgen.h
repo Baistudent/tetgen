@@ -2128,6 +2128,10 @@ public:
   int  scout_point(point, triface*, int randflag);
   REAL getpointmeshsize(point, triface*, int iloc);
   void interpolatemeshsize();
+  REAL getdensitybasesize(triface*);
+  REAL densityregionsizefactor(REAL*);
+  REAL densityregionsigneddistance(tetgenio::densityregion*, REAL*);
+  bool checkdensityregionsize(triface*, REAL*, REAL*);
 
   void insertconstrainedpoints(point *insertarray, int arylen, int rejflag);
   void insertconstrainedpoints(tetgenio *addio);

@@ -103,13 +103,22 @@ default behavior must remain unchanged when no density regions are configured.
 - The PLC density-region helper deep-copies the existing `tetgenio` point and
   facet representation so callers can load or construct a closed `.poly`-style
   surface without introducing a new geometry file format.
+- Added internal density-region evaluation helpers:
+  - signed distance for box, cylinder, and sphere regions;
+  - approximate signed distance for closed PLC regions by triangulating each
+    polygon as a fan, using ray casting for inside/outside and point-triangle
+    distance for transition distance;
+  - `smoothstep` blending from refined target size to the base target size
+    across each region's outward transition band.
 
 ## Current Issues
 
 - Arbitrary closed density geometry will be implemented through the existing
-  `tetgenio` PLC/facet representation instead of a new file format. The first
-  implementation will use triangle fan decomposition of polygonal facets and
-  ray casting for inside/outside tests.
+  `tetgenio` PLC/facet representation instead of a new file format.
+- PLC region evaluation assumes the supplied surface is closed and reasonably
+  consistently faceted. The implementation triangulates polygon facets as fans,
+  which matches the simple polygon storage in `.poly` but is an approximation
+  for non-planar or self-intersecting facets.
 - The current command line file formats will not be changed unless needed; the
   primary API surface for density regions will be the C++ library API.
 

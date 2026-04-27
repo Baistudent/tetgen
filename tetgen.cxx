@@ -25594,6 +25594,335 @@ void tetgenmesh::interpolatemeshsize()
 
 //============================================================================//
 //                                                                            //
+// density region size evaluation                                             //
+//                                                                            //
+//============================================================================//
+
+static REAL density_dot3(REAL *a, REAL *b)
+{
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+static void density_sub3(REAL *a, REAL *b, REAL *out)
+{
+  out[0] = a[0] - b[0];
+  out[1] = a[1] - b[1];
+  out[2] = a[2] - b[2];
+}
+
+static void density_cross3(REAL *a, REAL *b, REAL *out)
+{
+  out[0] = a[1] * b[2] - a[2] * b[1];
+  out[1] = a[2] * b[0] - a[0] * b[2];
+  out[2] = a[0] * b[1] - a[1] * b[0];
+}
+
+static REAL density_point_segment_distance2(REAL *p, REAL *a, REAL *b)
+{
+  REAL ab[3], ap[3];
+  density_sub3(b, a, ab);
+  density_sub3(p, a, ap);
+  REAL denom = density_dot3(ab, ab);
+  if (denom <= 0.0) {
+    return density_dot3(ap, ap);
+  }
+  REAL t = density_dot3(ap, ab) / denom;
+  if (t < 0.0) t = 0.0;
+  if (t > 1.0) t = 1.0;
+  REAL q[3] = {a[0] + t * ab[0], a[1] + t * ab[1], a[2] + t * ab[2]};
+  REAL d[3];
+  density_sub3(p, q, d);
+  return density_dot3(d, d);
+}
+
+static REAL density_point_triangle_distance2(REAL *p, REAL *a, REAL *b,
+                                             REAL *c)
+{
+  REAL ab[3], ac[3], ap[3], bp[3], cp[3];
+  density_sub3(b, a, ab);
+  density_sub3(c, a, ac);
+  density_sub3(p, a, ap);
+  REAL d1 = density_dot3(ab, ap);
+  REAL d2 = density_dot3(ac, ap);
+  if ((d1 <= 0.0) && (d2 <= 0.0)) return density_dot3(ap, ap);
+
+  density_sub3(p, b, bp);
+  REAL d3 = density_dot3(ab, bp);
+  REAL d4 = density_dot3(ac, bp);
+  if ((d3 >= 0.0) && (d4 <= d3)) return density_dot3(bp, bp);
+
+  REAL vc = d1 * d4 - d3 * d2;
+  if ((vc <= 0.0) && (d1 >= 0.0) && (d3 <= 0.0)) {
+    REAL v = d1 / (d1 - d3);
+    REAL q[3] = {a[0] + v * ab[0], a[1] + v * ab[1], a[2] + v * ab[2]};
+    REAL d[3];
+    density_sub3(p, q, d);
+    return density_dot3(d, d);
+  }
+
+  density_sub3(p, c, cp);
+  REAL d5 = density_dot3(ab, cp);
+  REAL d6 = density_dot3(ac, cp);
+  if ((d6 >= 0.0) && (d5 <= d6)) return density_dot3(cp, cp);
+
+  REAL vb = d5 * d2 - d1 * d6;
+  if ((vb <= 0.0) && (d2 >= 0.0) && (d6 <= 0.0)) {
+    REAL w = d2 / (d2 - d6);
+    REAL q[3] = {a[0] + w * ac[0], a[1] + w * ac[1], a[2] + w * ac[2]};
+    REAL d[3];
+    density_sub3(p, q, d);
+    return density_dot3(d, d);
+  }
+
+  REAL va = d3 * d6 - d5 * d4;
+  if ((va <= 0.0) && ((d4 - d3) >= 0.0) && ((d5 - d6) >= 0.0)) {
+    REAL bc[3];
+    density_sub3(c, b, bc);
+    REAL w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+    REAL q[3] = {b[0] + w * bc[0], b[1] + w * bc[1], b[2] + w * bc[2]};
+    REAL d[3];
+    density_sub3(p, q, d);
+    return density_dot3(d, d);
+  }
+
+  REAL n[3];
+  density_cross3(ab, ac, n);
+  REAL nn = density_dot3(n, n);
+  if (nn <= 0.0) {
+    REAL dab = density_point_segment_distance2(p, a, b);
+    REAL dbc = density_point_segment_distance2(p, b, c);
+    REAL dca = density_point_segment_distance2(p, c, a);
+    REAL dmin = dab < dbc ? dab : dbc;
+    return dmin < dca ? dmin : dca;
+  }
+  REAL dist = density_dot3(ap, n);
+  return (dist * dist) / nn;
+}
+
+static int density_ray_intersects_triangle(REAL *p, REAL *a, REAL *b, REAL *c)
+{
+  REAL dir[3] = {1.0, 0.3713906763541037, 0.5298129428260175};
+  REAL edge1[3], edge2[3], h[3], s[3], q[3];
+  density_sub3(b, a, edge1);
+  density_sub3(c, a, edge2);
+  density_cross3(dir, edge2, h);
+  REAL det = density_dot3(edge1, h);
+  if (fabs(det) < 1.0e-12) {
+    return 0;
+  }
+  REAL invdet = 1.0 / det;
+  density_sub3(p, a, s);
+  REAL u = invdet * density_dot3(s, h);
+  if ((u < -1.0e-12) || (u > 1.0 + 1.0e-12)) {
+    return 0;
+  }
+  density_cross3(s, edge1, q);
+  REAL v = invdet * density_dot3(dir, q);
+  if ((v < -1.0e-12) || ((u + v) > 1.0 + 1.0e-12)) {
+    return 0;
+  }
+  REAL t = invdet * density_dot3(edge2, q);
+  return t > 1.0e-12;
+}
+
+static REAL *density_region_vertex(tetgenio::densityregion *region, int index)
+{
+  int offset = index - region->firstnumber;
+  if ((offset < 0) || (offset >= region->numberofpoints)) {
+    return (REAL *) NULL;
+  }
+  return &(region->pointlist[offset * 3]);
+}
+
+REAL tetgenmesh::getdensitybasesize(triface *chktet)
+{
+  if ((b->fixedvolume) && (b->maxvolume_length > 0.0)) {
+    return b->maxvolume_length;
+  }
+  if (b->varvolume) {
+    REAL volbnd = volumebound(chktet->tet);
+    if (volbnd > 0.0) {
+      return pow(volbnd, 1.0 / 3.0) / 3.0;
+    }
+  }
+  if (b->metric) {
+    point *pts = (point *) &(chktet->tet[4]);
+    REAL sum = 0.0;
+    int count = 0;
+    for (int i = 0; i < 4; i++) {
+      if (pts[i][pointmtrindex] > 0.0) {
+        sum += pts[i][pointmtrindex];
+        count++;
+      }
+    }
+    if (count > 0) {
+      return sum / (REAL) count;
+    }
+  }
+  if (longest > 0.0) {
+    return longest / 24.0;
+  }
+  return 0.0;
+}
+
+REAL tetgenmesh::densityregionsigneddistance(tetgenio::densityregion *region,
+                                             REAL *p)
+{
+  if (region->type == tetgenio::BOXDENSITYREGION) {
+    REAL center[3], half[3], q[3];
+    for (int i = 0; i < 3; i++) {
+      REAL minv = region->p0[i] < region->p1[i] ? region->p0[i] : region->p1[i];
+      REAL maxv = region->p0[i] > region->p1[i] ? region->p0[i] : region->p1[i];
+      center[i] = 0.5 * (minv + maxv);
+      half[i] = 0.5 * (maxv - minv);
+      q[i] = fabs(p[i] - center[i]) - half[i];
+    }
+    REAL outside[3] = {
+      q[0] > 0.0 ? q[0] : 0.0,
+      q[1] > 0.0 ? q[1] : 0.0,
+      q[2] > 0.0 ? q[2] : 0.0
+    };
+    REAL maxq = q[0] > q[1] ? q[0] : q[1];
+    maxq = maxq > q[2] ? maxq : q[2];
+    REAL inside = maxq < 0.0 ? maxq : 0.0;
+    return sqrt(density_dot3(outside, outside)) + inside;
+  }
+
+  if (region->type == tetgenio::SPHEREDENSITYREGION) {
+    REAL v[3];
+    density_sub3(p, region->p0, v);
+    return sqrt(density_dot3(v, v)) - region->radius;
+  }
+
+  if (region->type == tetgenio::CYLINDERDENSITYREGION) {
+    REAL axis[3], pa[3];
+    density_sub3(region->p1, region->p0, axis);
+    density_sub3(p, region->p0, pa);
+    REAL len = sqrt(density_dot3(axis, axis));
+    if (len <= 0.0) {
+      return 1.0e100;
+    }
+    REAL h = density_dot3(pa, axis) / len;
+    REAL radial2 = density_dot3(pa, pa) - h * h;
+    if (radial2 < 0.0) radial2 = 0.0;
+    REAL radial = sqrt(radial2) - region->radius;
+    REAL axial = h < 0.0 ? -h : h - len;
+    if ((h >= 0.0) && (h <= len)) axial = -1.0e100;
+    REAL orad = radial > 0.0 ? radial : 0.0;
+    REAL oaxi = axial > 0.0 ? axial : 0.0;
+    REAL outside = sqrt(orad * orad + oaxi * oaxi);
+    REAL inside = radial > axial ? radial : axial;
+    if (inside > 0.0) inside = 0.0;
+    return outside + inside;
+  }
+
+  if (region->type == tetgenio::PLCDENSITYREGION) {
+    REAL mindist2 = 1.0e100;
+    int intersections = 0;
+    for (int i = 0; i < region->numberoffacets; i++) {
+      tetgenio::facet *f = &(region->facetlist[i]);
+      for (int j = 0; j < f->numberofpolygons; j++) {
+        tetgenio::polygon *poly = &(f->polygonlist[j]);
+        if (poly->numberofvertices < 3) {
+          continue;
+        }
+        REAL *a = density_region_vertex(region, poly->vertexlist[0]);
+        if (a == (REAL *) NULL) {
+          continue;
+        }
+        for (int k = 1; k < poly->numberofvertices - 1; k++) {
+          REAL *b = density_region_vertex(region, poly->vertexlist[k]);
+          REAL *c = density_region_vertex(region, poly->vertexlist[k + 1]);
+          if ((b == (REAL *) NULL) || (c == (REAL *) NULL)) {
+            continue;
+          }
+          REAL d2 = density_point_triangle_distance2(p, a, b, c);
+          if (d2 < mindist2) {
+            mindist2 = d2;
+          }
+          intersections += density_ray_intersects_triangle(p, a, b, c);
+        }
+      }
+    }
+    REAL dist = mindist2 < 1.0e99 ? sqrt(mindist2) : 1.0e100;
+    return (intersections & 1) ? -dist : dist;
+  }
+
+  return 1.0e100;
+}
+
+REAL tetgenmesh::densityregionsizefactor(REAL *p)
+{
+  if ((in == (tetgenio *) NULL) || (in->numberofdensityregions <= 0) ||
+      (in->densityregionlist == (tetgenio::densityregion *) NULL)) {
+    return 1.0;
+  }
+
+  REAL factor = 1.0;
+  for (int i = 0; i < in->numberofdensityregions; i++) {
+    tetgenio::densityregion *region = &(in->densityregionlist[i]);
+    if (region->sizefactor >= 1.0) {
+      continue;
+    }
+    REAL dist = densityregionsigneddistance(region, p);
+    REAL localfactor = 1.0;
+    if (dist <= 0.0) {
+      localfactor = region->sizefactor;
+    } else if ((region->transition > 0.0) && (dist < region->transition)) {
+      REAL t = dist / region->transition;
+      REAL s = t * t * (3.0 - 2.0 * t);
+      localfactor = region->sizefactor + (1.0 - region->sizefactor) * s;
+    }
+    if (localfactor < factor) {
+      factor = localfactor;
+    }
+  }
+  return factor;
+}
+
+bool tetgenmesh::checkdensityregionsize(triface *chktet, REAL *samplept,
+                                        REAL *targetsize)
+{
+  if ((in == (tetgenio *) NULL) || (in->numberofdensityregions <= 0)) {
+    return false;
+  }
+
+  REAL factor = densityregionsizefactor(samplept);
+  if (factor >= 1.0) {
+    return false;
+  }
+
+  REAL base = getdensitybasesize(chktet);
+  if (base <= 0.0) {
+    return false;
+  }
+  *targetsize = base * factor;
+  if (*targetsize <= 0.0) {
+    return false;
+  }
+
+  point *pts = (point *) &(chktet->tet[4]);
+  REAL edge2[6];
+  edge2[0] = distance2(pts[2], pts[3]);
+  edge2[1] = distance2(pts[3], pts[0]);
+  edge2[2] = distance2(pts[0], pts[1]);
+  edge2[3] = distance2(pts[1], pts[2]);
+  edge2[4] = distance2(pts[1], pts[3]);
+  edge2[5] = distance2(pts[0], pts[2]);
+  REAL maxedge2 = edge2[0];
+  for (int i = 1; i < 6; i++) {
+    if (edge2[i] > maxedge2) {
+      maxedge2 = edge2[i];
+    }
+  }
+
+  // TetGen's scalar metric path compares a target insertion radius against
+  // half of the local edge length; use the same convention here.
+  return (0.5 * sqrt(maxedge2)) > *targetsize;
+}
+
+//============================================================================//
+//                                                                            //
 // insertconstrainedpoints()    Insert a list of points into the mesh.        //
 //                                                                            //
 // Assumption:  The bounding box of the insert point set should be no larger  //
