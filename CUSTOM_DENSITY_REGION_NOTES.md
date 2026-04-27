@@ -134,11 +134,58 @@ default behavior must remain unchanged when no density regions are configured.
 - The current command line file formats will not be changed unless needed; the
   primary API surface for density regions will be the C++ library API.
 
+## Build and Run Verification
+
+Commands run from repository root:
+
+```powershell
+cmake -S . -B build -DBUILD_LIBRARY=ON -DBUILD_EXECUTABLE=OFF
+cmake --build build --config Release
+cmake -S . -B build -DBUILD_LIBRARY=ON -DBUILD_EXECUTABLE=OFF -DBUILD_DENSITY_EXAMPLE=ON
+cmake --build build --config Release --target density_regions_example
+.\build\Release\density_regions_example.exe
+```
+
+Results:
+
+- Static library generated: `build/Release/tetgen.lib`.
+- Example executable generated: `build/Release/density_regions_example.exe`.
+- The MSVC build reports existing deprecation warnings for C stdio/string
+  routines in TetGen. The example target also prints an environment message
+  that `pwsh.exe` is unavailable, but the target is produced and the command
+  exits successfully.
+
+Example run summary:
+
+- `baseline`: 245 points, 825 tetrahedra.
+- `box_density`: 2032 points, 10521 tetrahedra.
+- `cylinder_density`: 2902 points, 15590 tetrahedra.
+- `sphere_density`: 886 points, 4089 tetrahedra.
+- `custom_plc_density`: 922 points, 4331 tetrahedra.
+
+Generated files in `density_region_results/`:
+
+- `input_geometry.vtk`: input `example.poly` PLC surface.
+- `*_density_region.vtk`: density-region geometry surfaces for box, cylinder,
+  sphere, and custom closed PLC region.
+- `baseline.node`, `baseline.ele`, `baseline.face`, `baseline.vtk`: baseline
+  TetGen and VTK tetrahedral mesh output.
+- `box_density.*`, `cylinder_density.*`, `sphere_density.*`,
+  `custom_plc_density.*`: matching TetGen `.node` / `.ele` / `.face` files and
+  VTK unstructured-grid files for each density-region run.
+
+Visualization:
+
+- Open `density_region_results/input_geometry.vtk`, a `*_density_region.vtk`,
+  and the matching mesh `.vtk` in ParaView.
+- Use surface/wireframe display for the region geometry and mesh display for
+  the tetrahedral grid. Comparing `baseline.vtk` with each density case shows
+  the local increase in tetrahedron count near the configured region.
+
 ## Next Steps
 
-1. Add density-region storage and API to `tetgenio`.
-2. Implement analytic box, cylinder, and sphere distance/evaluation helpers.
-3. Implement arbitrary closed PLC distance/evaluation helpers.
-4. Connect density-region target size to tetrahedron refinement checks.
-5. Add the library example and visualization output.
-6. Build, run, record generated outputs, and commit each completed stage.
+1. Review PLC signed-distance accuracy on complex self-intersecting or
+   non-planar region surfaces if those inputs need to be supported.
+2. Optionally add a command-line file format for density regions. The current
+   implementation intentionally keeps this as a C++ API to avoid changing
+   TetGen's existing input formats.
