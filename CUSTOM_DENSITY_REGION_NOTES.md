@@ -118,6 +118,9 @@ default behavior must remain unchanged when no density regions are configured.
   this order: fixed `-a#` volume length, per-tet `-a` volume bound, point
   metric `-m`, then a conservative fallback of `longest / 24` when a caller
   supplies density regions without another size field.
+- If a caller configures density regions but does not pass a switch that would
+  normally enter refinement (`-q` or `-a`), `tetrahedralize()` enables the
+  existing quality/refinement stage so the density regions have an effect.
 - Added `examples/custom_density_regions.cxx` and optional CMake target
   `density_regions_example`. The example reads `example.poly`, runs baseline,
   box, cylinder, sphere, and custom closed PLC density-region cases, then

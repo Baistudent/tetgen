@@ -36708,6 +36708,12 @@ void tetrahedralize(tetgenbehavior *b, tetgenio *in, tetgenio *out,
   m.in = in;
   m.addin = addin;
 
+  if ((in != (tetgenio *) NULL) && (in->numberofdensityregions > 0) &&
+      !b->quality) {
+    // Density regions are enforced by the Delaunay refinement stage.
+    b->quality = 1;
+  }
+
   if (b->metric && bgmin && (bgmin->numberofpoints > 0)) {
     m.bgm = new tetgenmesh(); // Create an empty background mesh.
     m.bgm->b = b;
