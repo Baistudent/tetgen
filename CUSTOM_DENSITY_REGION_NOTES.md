@@ -110,6 +110,13 @@ default behavior must remain unchanged when no density regions are configured.
     distance for transition distance;
   - `smoothstep` blending from refined target size to the base target size
     across each region's outward transition band.
+- Connected density regions to the existing tetrahedron refinement checks:
+  `check_tetrahedron()` and `checktet4split()` now request a split when the
+  local half-edge size exceeds the density-region target size.
+- Base size selection for density regions reuses existing TetGen controls in
+  this order: fixed `-a#` volume length, per-tet `-a` volume bound, point
+  metric `-m`, then a conservative fallback of `longest / 24` when a caller
+  supplies density regions without another size field.
 
 ## Current Issues
 

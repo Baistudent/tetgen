@@ -28828,6 +28828,12 @@ bool tetgenmesh::check_tetrahedron(triface *chktet, REAL* param, int &qflag)
     }
   } // if (!qflag && b->metric) // -m
 
+  REAL densitysize = 0.0;
+  if (checkdensityregionsize(chktet, param, &densitysize)) {
+    emin = (emin < densitysize ? emin : densitysize);
+    qflag = 1;
+  }
+
   if (qflag) {
     param[3] = emin; // The desired mesh size.
     //param[4] = 1.0; // ratio; // = 0.
@@ -28964,6 +28970,13 @@ bool tetgenmesh::checktet4split(triface *chktet, REAL* param, int& qflag)
         }
       }
     }
+  }
+
+  REAL densitysize = 0.0;
+  if (checkdensityregionsize(chktet, param, &densitysize)) {
+    qflag = 1;
+    param[3] = densitysize;
+    return true;
   }
 
   if (in->tetunsuitable != NULL) {
